@@ -72,16 +72,15 @@ class User {
         this.commentsID.push(commentID)
     }
 
-    delComment(commentID: number): void {
-        this.commentsID.filter(c => c !== commentID)
-    }
-
     addProduct(productID: number): void {
         this.productsID.push(productID)
     }
 
+    delComment(commentID: number): void {
+        this.commentsID = this.commentsID.filter(c => c !== commentID);
+    }
     delProduct(productID: number): void {
-        this.commentsID.filter(p => p !== productID)
+        this.productsID = this.productsID.filter(p => p !== productID);
     }
 }
 
@@ -144,6 +143,9 @@ class Product {
     setCategory(category: string[]): void {
         this.category = category;
     }
+    delComment(commentID: number): void {
+        this.commentsID = this.commentsID.filter(id => id !== commentID);
+    }
 }
 
 class Comment {
@@ -202,6 +204,13 @@ class Comment {
 
 class UserService {
     private users: User[] = [];
+    private commentService: CommentService;
+    private productService: ProductService;
+
+    constructor(commentService: CommentService, productService: ProductService) {
+        this.commentService = commentService;
+        this.productService = productService;
+    }
 
     addUser(user: User): boolean {
         this.users.push(user);
@@ -226,25 +235,46 @@ class UserService {
 
         return true;
     }
+
     deleteUser(userID: number): boolean {
-        const index = this.users.findIndex(user => user.getId() === userID);
-        if (index === -1) return false;
-        this.users.splice(index, 1);
+        const userIndex = this.users.findIndex(user => user.getId() === userID);
+        if (userIndex === -1) return false;
+
+        const user = this.users[userIndex];
+        const userComments = user.getCommentsID();
+        userComments.forEach(commentID => {
+            this.commentService.deleteComment(commentID);
+        });
+
+        const userProducts = user.getProductsID();
+        userProducts.forEach(productID => {
+            this.productService.deleteProduct(productID);
+        });
+
+        this.users.splice(userIndex, 1);
         return true;
     }
-    
 }
 
 class ProductService {
     private products: Product[] = [];
+    private commentService: CommentService;
+    private userService: UserService;
+
+    constructor(commentService: CommentService, userService: UserService) {
+        this.commentService = commentService;
+        this.userService = userService;
+    }
 
     addProduct(product: Product): boolean {
         this.products.push(product);
         return true;
     }
-    getProduct(productID: number) {
-        return this.products.find(p => p.getId() === productID)
+
+    getProduct(productID: number): Product | undefined {
+        return this.products.find(p => p.getId() === productID);
     }
+
     getAllProducts(): Product[] {
         return this.products;
     }
@@ -266,16 +296,41 @@ class ProductService {
 
         return true;
     }
+
     deleteProduct(productID: number): boolean {
-        const index = this.products.findIndex(p => p.getId() === productID);
-        if (index === -1) return false;
-        this.products.splice(index, 1);
+        const productIndex = this.products.findIndex(p => p.getId() === productID);
+        if (productIndex === -1) return false;
+
+        const product = this.products[productIndex];
+
+        const productComments = product.getCommentsID();
+        productComments.forEach(commentID => {
+            this.commentService.deleteComment(commentID);
+        });
+
+        const users = this.userService.getUsersByName('');
+        users.forEach(user => {
+            const productIDs = user.getProductsID();
+            const productIndexForUser = productIDs.indexOf(productID);
+            if (productIndexForUser !== -1) {
+                user.delProduct(productID);
+            }
+        });
+
+        this.products.splice(productIndex, 1);
         return true;
     }
 }
 
 class CommentService {
     private comments: Comment[] = [];
+    private userService: UserService;
+    private productService: ProductService;
+
+    constructor(userService: UserService, productService: ProductService) {
+        this.userService = userService;
+        this.productService = productService;
+    }
 
     addComment(comment: Comment): boolean {
         this.comments.push(comment);
@@ -311,6 +366,17 @@ class CommentService {
     deleteComment(commentID: number): boolean {
         const index = this.comments.findIndex(c => c.getId() === commentID);
         if (index === -1) return false;
+
+        const comment = this.comments[index];
+        const userID = comment.getUserID();
+        const productID = comment.getProductID();
+
+        const user = this.userService.getUserByID(userID);
+        if (user) user.delComment(commentID);
+
+        const product = this.productService.getProduct(productID);
+        if (product) product.delComment(commentID);
+
         this.comments.splice(index, 1);
         return true;
     }
